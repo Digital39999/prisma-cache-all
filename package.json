@@ -1,5 +1,5 @@
 {
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"name": "prisma-cache-all",
 	"author": "Digital39999",
 	"scripts": {
@@ -24,7 +24,7 @@
 		"node": ">=20.2.0"
 	},
 	"dependencies": {
-		"@prisma/client": "^6.1.0",
+		"@prisma/client": "^5.9.1",
 		"ioredis": "^5.4.2",
 		"lru-cache": "^11.0.2"
 	}
