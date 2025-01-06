@@ -1,0 +1,31 @@
+{
+	"version": "1.0.0",
+	"name": "prisma-cache-all",
+	"author": "Digital39999",
+	"scripts": {
+		"ts": "pnpm install typescript --save-dev -g",
+		"init": "pnpm install && pnpm run build",
+		"build": "tsc --build",
+		"watch": "tsc --watch",
+		"lint": "eslint . --ext .ts",
+		"updates": "pnpm npm-check-updates -i --format group"
+	},
+	"repository": "https://github.com/Digital39999/prisma-cache-all",
+	"main": "dist/index.js",
+	"license": "MIT",
+	"devDependencies": {
+		"@types/node": "^20.14.13",
+		"@typescript-eslint/eslint-plugin": "^6.18.0",
+		"@typescript-eslint/parser": "^6.18.0",
+		"eslint": "^8.56.0",
+		"typescript": "^5.3.3"
+	},
+	"engines": {
+		"node": ">=20.2.0"
+	},
+	"dependencies": {
+		"@prisma/client": "^6.1.0",
+		"ioredis": "^5.4.2",
+		"lru-cache": "^11.0.2"
+	}
+}
