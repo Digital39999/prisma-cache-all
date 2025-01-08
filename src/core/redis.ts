@@ -10,11 +10,8 @@ export class Redis implements Cache {
 		urlOrClient: string | RedisClient,
 		options: RedisOptions & { ttlSeconds?: number; } = { ttlSeconds: 60, keyPrefix: 'cache' },
 	) {
-		if (typeof urlOrClient === 'string') {
-			this.client = new RedisClient(urlOrClient, options);
-		} else {
-			this.client = urlOrClient;
-		}
+		if (typeof urlOrClient === 'string') this.client = new RedisClient(urlOrClient, options);
+		else this.client = urlOrClient;
 
 		this.lifetime = options.ttlSeconds || 60;
 	}

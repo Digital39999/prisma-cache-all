@@ -1,3 +1,5 @@
+import { createHash } from 'crypto';
+
 export const PureActions = [
 	'aggregate',
 	'count',
@@ -17,3 +19,8 @@ export const ImpureActions = [
 	'updateMany',
 	'upsert',
 ];
+
+export function makeHash(str: string | null): string {
+	if (!str) return '';
+	return createHash('sha256').update(str).digest('hex');
+}

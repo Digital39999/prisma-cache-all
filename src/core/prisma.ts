@@ -1,4 +1,4 @@
-import { ImpureActions, PureActions } from '../other';
+import { ImpureActions, makeHash, PureActions } from '../other';
 import { SingletonClient, Cache } from '../types';
 import { PrismaClient } from '@prisma/client';
 import { LRUCache } from './lru';
@@ -10,13 +10,8 @@ export class Prisma {
 	client: PrismaClient;
 
 	constructor(cacheFactory: Cache = new LRUCache({ max: 1000 })) {
-		if (!Prisma.singleton.cache) {
-			Prisma.singleton.cache = cacheFactory;
-		}
-
-		if (!Prisma.singleton.client) {
-			Prisma.singleton.client = Prisma.clientFactory();
-		}
+		if (!Prisma.singleton.cache) Prisma.singleton.cache = cacheFactory;
+		if (!Prisma.singleton.client) Prisma.singleton.client = Prisma.clientFactory();
 
 		this.client = Prisma.singleton.client;
 		this.cache = Prisma.singleton.cache;
@@ -25,10 +20,7 @@ export class Prisma {
 	private static clientFactory(): PrismaClient {
 		const client = new PrismaClient();
 
-		for (const field of Object.getOwnPropertyNames(client).filter(
-			(property: string) =>
-				!property.startsWith('$') && !property.startsWith('_'),
-		)) {
+		for (const field of Object.getOwnPropertyNames(client).filter((property: string) => !property.startsWith('$') && !property.startsWith('_'))) {
 			for (const action of ImpureActions) {
 				const pristine = client[field][action];
 
@@ -42,14 +34,12 @@ export class Prisma {
 				const pristine = client[field][action];
 
 				client[field][action] = async (...args: unknown[]) => {
-					const key = JSON.stringify({ field, action, args });
+					const key = makeHash(JSON.stringify({ field, action, args }));
 					const cached = await Prisma.singleton.cache?.read(key);
 
-					if (cached) {
-						return transformDates(JSON.parse(cached));
-					}
-
+					if (cached) return transformDates(JSON.parse(cached));
 					const evaluated = await pristine(...args);
+
 					await Prisma.singleton.cache?.write(key, JSON.stringify(evaluated));
 					return evaluated;
 				};
