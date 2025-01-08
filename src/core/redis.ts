@@ -17,11 +17,12 @@ export class Redis implements Cache {
 	}
 
 	read(key: string): Promise<string | null> {
-		return this.client.get(key);
+		return this.client.get(this.client.options.keyPrefix ? `${this.client.options.keyPrefix}:${key}` : key);
 	}
 
 	async write(key: string, value: string): Promise<void> {
-		await this.client.set(key, value, 'EX', this.lifetime);
+		const redisKey = this.client.options.keyPrefix ? `${this.client.options.keyPrefix}:${key}` : key;
+		await this.client.set(redisKey, value, 'EX', this.lifetime);
 	}
 
 	async flush(): Promise<void> {
