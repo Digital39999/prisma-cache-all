@@ -16,8 +16,8 @@ export class Redis implements Cache {
 		this.lifetime = options.ttlSeconds || 60;
 	}
 
-	read(key: string): Promise<string | null> {
-		return this.client.get(this.client.options.keyPrefix ? `${this.client.options.keyPrefix}:${key}` : key);
+	async read(key: string): Promise<string | null> {
+		return await this.client.get(this.client.options.keyPrefix ? `${this.client.options.keyPrefix}:${key}` : key);
 	}
 
 	async write(key: string, value: string): Promise<void> {
