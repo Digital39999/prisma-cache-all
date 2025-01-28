@@ -8,7 +8,7 @@ This package provides an extension of Prisma that includes caching mechanisms us
 
 1. **Install Dependencies**:
    ```bash
-   npm install @prisma/client lru-cache ioredis
+   npm install @prisma/client lru-cache ioredis prisma-cache-all
    ```
 
 2. **Ensure Prisma Client is Generated**:
