@@ -1,5 +1,6 @@
 import { ImpureActions, makeHash, PureActions } from '../other';
 import { SingletonClient, Cache } from '../types';
+// @ts-ignore
 import { PrismaClient } from '@prisma/client';
 import { LRUCache } from './lru';
 
@@ -9,7 +10,7 @@ export class Prisma {
 	cache: Cache;
 	client: PrismaClient;
 
-	constructor(cacheFactory: Cache = new LRUCache({ max: 1000 })) {
+	constructor (cacheFactory: Cache = new LRUCache({ max: 1000 })) {
 		if (!Prisma.singleton.cache) Prisma.singleton.cache = cacheFactory;
 		if (!Prisma.singleton.client) Prisma.singleton.client = Prisma.clientFactory();
 
