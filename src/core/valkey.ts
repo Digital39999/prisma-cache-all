@@ -19,7 +19,7 @@ export class ValKey implements Cache {
 		else this.client = urlOrClient;
 
 		this.lifetime = options.ttlSeconds || 60;
-		this.hashIdentifier = options.keyPrefix ? `${options.keyPrefix}:hash` : 'cache:hash';
+		this.hashIdentifier = options.keyPrefix || 'prisma-cache';
 
 		this.startCleanupInterval();
 	}
