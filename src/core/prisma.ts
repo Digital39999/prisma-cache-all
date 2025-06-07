@@ -35,14 +35,15 @@ export class Prisma {
 				const pristine = client[field][action];
 
 				client[field][action] = async (...args: unknown[]) => {
-					const key = makeHash(JSON.stringify({ field, action, args }));
+					const key = makeHash(toSafeString({ field, action, args }));
 					const cached = await Prisma.singleton.cache?.read(key);
 
-					if (cached) return transformDates(JSON.parse(cached));
+					if (cached) return transformDates(fromSafeString(cached));
 					const evaluated = await pristine(...args);
 
-					await Prisma.singleton.cache?.write(key, JSON.stringify(evaluated));
+					await Prisma.singleton.cache?.write(key, toSafeString(evaluated));
 					return evaluated;
+
 				};
 			}
 		}
@@ -51,15 +52,36 @@ export class Prisma {
 	}
 }
 
+export function toSafeString(value: unknown): string {
+	return JSON.stringify(value, (_key, val) => {
+		if (val instanceof Date) return val.toISOString();
+		if (Buffer.isBuffer(val)) return { __type: 'Buffer', data: val.toString('base64') };
+		if (val instanceof ArrayBuffer) return { __type: 'ArrayBuffer', data: Buffer.from(val).toString('base64') };
+		if (val instanceof Blob || val instanceof File) return null; // skip unsupported
+		return val;
+	});
+}
+
+export function fromSafeString(value: string): unknown {
+	return JSON.parse(value, (_key, val) => {
+		if (val?.__type === 'Buffer') return Buffer.from(val.data, 'base64');
+		if (val?.__type === 'ArrayBuffer') return Buffer.from(val.data, 'base64').buffer;
+		if (isDateStringRegex(val)) return new Date(val);
+		return val;
+	});
+}
+
 export function isDateStringRegex(value: unknown): value is string {
 	const isoPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/;
 	return typeof value === 'string' && isoPattern.test(value);
 }
 
 export function transformDates<T>(data: T): T {
-	if (data instanceof Date) return data as unknown as T;
+	if (data instanceof Date || Buffer.isBuffer(data)) return data;
 	if (Array.isArray(data)) return data.map(transformDates) as unknown as T;
 	if (typeof data === 'object' && data !== null) {
+		if (data instanceof ArrayBuffer || data instanceof Blob || data instanceof File || data instanceof Buffer) return data as unknown as T;
+
 		for (const key in data) {
 			data[key] = transformDates(data[key]);
 		}
