@@ -1,5 +1,5 @@
 {
-	"version": "1.0.10",
+	"version": "1.1.0",
 	"name": "prisma-cache-all",
 	"author": "Digital39999",
 	"scripts": {
@@ -13,20 +13,25 @@
 	"repository": "https://github.com/Digital39999/prisma-cache-all",
 	"main": "dist/index.js",
 	"license": "MIT",
+	"pnpm": {
+		"onlyBuiltDependencies": [
+			"@prisma/client"
+		]
+	},
 	"devDependencies": {
-		"@types/node": "^20.14.13",
-		"@typescript-eslint/eslint-plugin": "^6.18.0",
-		"@typescript-eslint/parser": "^6.18.0",
-		"eslint": "^8.56.0",
-		"typescript": "^5.3.3"
+		"@types/node": "20.14.13",
+		"@typescript-eslint/eslint-plugin": "6.18.0",
+		"@typescript-eslint/parser": "6.18.0",
+		"eslint": "8.56.0",
+		"typescript": "5.8.3",
+		"@prisma/client": "6.12.0"
 	},
 	"engines": {
 		"node": ">=20.2.0"
 	},
 	"dependencies": {
-		"@prisma/client": "^5.9.1",
-		"ioredis": "^5.4.2",
-		"iovalkey": "^0.3.1",
-		"lru-cache": "^11.0.2"
+		"ioredis": "5.6.1",
+		"iovalkey": "0.3.1",
+		"lru-cache": "11.1.0"
 	}
 }

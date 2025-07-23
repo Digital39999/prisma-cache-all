@@ -1,71 +1,83 @@
-import ValKeyClient, { RedisOptions } from 'iovalkey';
-import { Cache } from '../types';
+import { Cache, CacheOptions, ExpirableValue } from '../modules/types';
+import IORedis, { Redis, RedisOptions } from 'iovalkey';
 
-type ExpirableValue = {
-	d: string;
-	e: number;
-};
+export class ValKeyCache implements Cache {
+	private client: Redis;
+	private keyPrefix: string;
+	private defaultTtl: number;
+	private cleanupInterval?: NodeJS.Timeout;
 
-export class ValKey implements Cache {
-	readonly lifetime: number;
-	private client: ValKeyClient;
-	private hashIdentifier: string;
+	constructor (urlOrClient: string | Redis, options: RedisOptions & CacheOptions = {}) {
+		this.client = typeof urlOrClient === 'string'
+			? new IORedis(urlOrClient, options)
+			: urlOrClient;
 
-	constructor (
-		urlOrClient: string | ValKeyClient,
-		options: RedisOptions & { ttlSeconds?: number; } = { ttlSeconds: 60, keyPrefix: 'cache' },
-	) {
-		if (typeof urlOrClient === 'string') this.client = new ValKeyClient(urlOrClient, options);
-		else this.client = urlOrClient;
+		this.keyPrefix = options.keyPrefix ?? 'prisma:cache';
+		this.defaultTtl = options.ttlSeconds ?? 300;
 
-		this.lifetime = options.ttlSeconds || 60;
-		this.hashIdentifier = options.keyPrefix || 'prisma-cache';
-
-		this.startCleanupInterval();
+		this.startCleanup();
 	}
 
 	async read(key: string): Promise<string | null> {
-		const value = await this.client.hget(this.hashIdentifier, key);
+		const fullKey = `${this.keyPrefix}:${key}`;
+		const value = await this.client.get(fullKey);
+
 		if (!value) return null;
 
-		const expirableValue = JSON.parse(value) as ExpirableValue;
-		if (expirableValue.e > 0 && Date.now() > expirableValue.e) {
-			await this.client.hdel(this.hashIdentifier, key); // Auto-delete expired key
+		const parsed = JSON.parse(value) as ExpirableValue;
+		if (parsed.e > 0 && Date.now() > parsed.e) {
+			await this.client.del(fullKey);
 			return null;
 		}
 
-		return expirableValue.d;
+		return parsed.d;
 	}
 
-	async write(key: string, value: string): Promise<void> {
+	async write(key: string, value: string, ttl?: number): Promise<void> {
+		const fullKey = `${this.keyPrefix}:${key}`;
+		const expiry = ttl ?? this.defaultTtl;
+
 		const expirableValue: ExpirableValue = {
 			d: value,
-			e: this.lifetime ? Date.now() + this.lifetime * 1000 : 0, // Convert seconds to milliseconds
+			e: expiry > 0 ? Date.now() + expiry * 1000 : 0,
 		};
 
-		await this.client.hset(this.hashIdentifier, key, JSON.stringify(expirableValue));
+		if (expiry > 0) await this.client.setex(fullKey, expiry, JSON.stringify(expirableValue));
+		else await this.client.set(fullKey, JSON.stringify(expirableValue));
 	}
 
-	async flush(): Promise<void> {
-		await this.client.del(this.hashIdentifier);
+	async flush(pattern?: string): Promise<void> {
+		const searchPattern = pattern
+			? `${this.keyPrefix}:*${pattern}*`
+			: `${this.keyPrefix}:*`;
+
+		const keys = await this.client.keys(searchPattern);
+		if (keys.length > 0) await this.client.del(...keys);
 	}
 
-	close(): void {
-		this.client.disconnect();
+	async delete(key: string): Promise<void> {
+		await this.client.del(`${this.keyPrefix}:${key}`);
 	}
 
-	private startCleanupInterval(intervalMs: number = 600000): void { // Default: 10 minutes
-		setInterval(async () => {
-			const keys = await this.client.hkeys(this.hashIdentifier);
+	async close(): Promise<void> {
+		if (this.cleanupInterval) clearInterval(this.cleanupInterval);
+		await this.client.quit();
+	}
+
+	private startCleanup(intervalMs: number = 600000): void {
+		this.cleanupInterval = setInterval(async () => {
+			const keys = await this.client.keys(`${this.keyPrefix}:*`);
+			const pipeline = this.client.pipeline();
+
 			for (const key of keys) {
-				const value = await this.client.hget(this.hashIdentifier, key);
+				const value = await this.client.get(key);
 				if (!value) continue;
 
-				const expirableValue = JSON.parse(value) as ExpirableValue;
-				if (expirableValue.e > 0 && Date.now() > expirableValue.e) {
-					await this.client.hdel(this.hashIdentifier, key);
-				}
+				const parsed = JSON.parse(value) as ExpirableValue;
+				if (parsed.e > 0 && Date.now() > parsed.e) pipeline.del(key);
 			}
+
+			await pipeline.exec();
 		}, intervalMs);
 	}
 }

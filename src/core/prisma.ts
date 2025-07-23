@@ -1,91 +1,92 @@
-import { ImpureActions, makeHash, PureActions } from '../other';
-import { SingletonClient, Cache } from '../types';
-// @ts-ignore
-import { PrismaClient } from '@prisma/client';
+import { Cache, SingletonClient, CacheOptions } from '../modules/types';
+import { makeHash, serialize, deserialize } from '../modules/utils';
+import { PureActions, ImpureActions } from '../modules/constants';
+import type { PrismaClient } from '@prisma/client';
 import { LRUCache } from './lru';
 
-export class Prisma {
+export class PrismaWithCache {
 	private static singleton: SingletonClient = {};
+	private cacheEnabled: boolean;
 
-	cache: Cache;
-	client: PrismaClient;
+	public readonly cache: Cache;
+	public readonly client: PrismaClient;
 
-	constructor (cacheFactory: Cache = new LRUCache({ max: 1000 })) {
-		if (!Prisma.singleton.cache) Prisma.singleton.cache = cacheFactory;
-		if (!Prisma.singleton.client) Prisma.singleton.client = Prisma.clientFactory();
+	constructor (client: PrismaClient, cache?: Cache, options: CacheOptions = {}) {
+		this.cacheEnabled = options.enabled ?? true;
 
-		this.client = Prisma.singleton.client;
-		this.cache = Prisma.singleton.cache;
+		if (!PrismaWithCache.singleton.cache) PrismaWithCache.singleton.cache = cache ?? new LRUCache(options);
+		if (!PrismaWithCache.singleton.client) {
+			PrismaWithCache.singleton.client = client;
+			this.wrapClientMethods(PrismaWithCache.singleton.client);
+		}
+
+		this.client = PrismaWithCache.singleton.client;
+		this.cache = PrismaWithCache.singleton.cache;
 	}
 
-	private static clientFactory(): PrismaClient {
-		const client = new PrismaClient();
+	private wrapClientMethods(client: PrismaClient): void {
+		const modelNames = Object.getOwnPropertyNames(client).filter((prop) => !prop.startsWith('$') && !prop.startsWith('_') && typeof client[prop] === 'object');
 
-		for (const field of Object.getOwnPropertyNames(client).filter((property: string) => !property.startsWith('$') && !property.startsWith('_'))) {
+		for (const modelName of modelNames) {
+			const model = client[modelName];
+
 			for (const action of ImpureActions) {
-				const pristine = client[field][action];
+				if (typeof model[action] === 'function') {
+					const original = model[action].bind(model);
 
-				client[field][action] = (...args: unknown[]) => {
-					Prisma.singleton.cache?.flush();
-					return pristine(...args);
-				};
+					model[action] = async (...args: unknown[]) => {
+						const result = await original(...args);
+						if (this.cacheEnabled) await this.cache.flush(modelName);
+
+						return result;
+					};
+				}
 			}
 
 			for (const action of PureActions) {
-				const pristine = client[field][action];
+				if (typeof model[action] === 'function') {
+					const original = model[action].bind(model);
 
-				client[field][action] = async (...args: unknown[]) => {
-					const key = makeHash(toSafeString({ field, action, args }));
-					const cached = await Prisma.singleton.cache?.read(key);
+					model[action] = async (...args: unknown[]) => {
+						if (!this.cacheEnabled) return original(...args);
+						const cacheKey = this.generateCacheKey(modelName, action, args);
 
-					if (cached) return transformDates(fromSafeString(cached));
-					const evaluated = await pristine(...args);
+						const cached = await this.cache.read(cacheKey);
+						if (cached) return deserialize(cached);
 
-					await Prisma.singleton.cache?.write(key, toSafeString(evaluated));
-					return evaluated;
+						const result = await original(...args);
+						await this.cache.write(cacheKey, serialize(result));
 
-				};
+						return result;
+					};
+				}
 			}
 		}
-
-		return client;
-	}
-}
-
-export function toSafeString(value: unknown): string {
-	return JSON.stringify(value, (_key, val) => {
-		if (val instanceof Date) return val.toISOString();
-		if (Buffer.isBuffer(val)) return { __type: 'Buffer', data: val.toString('base64') };
-		if (val instanceof ArrayBuffer) return { __type: 'ArrayBuffer', data: Buffer.from(val).toString('base64') };
-		if (val instanceof Blob || val instanceof File) return null; // skip unsupported
-		return val;
-	});
-}
-
-export function fromSafeString(value: string): unknown {
-	return JSON.parse(value, (_key, val) => {
-		if (val?.__type === 'Buffer') return Buffer.from(val.data, 'base64');
-		if (val?.__type === 'ArrayBuffer') return Buffer.from(val.data, 'base64').buffer;
-		if (isDateStringRegex(val)) return new Date(val);
-		return val;
-	});
-}
-
-export function isDateStringRegex(value: unknown): value is string {
-	const isoPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/;
-	return typeof value === 'string' && isoPattern.test(value);
-}
-
-export function transformDates<T>(data: T): T {
-	if (data instanceof Date || Buffer.isBuffer(data)) return data;
-	if (Array.isArray(data)) return data.map(transformDates) as unknown as T;
-	if (typeof data === 'object' && data !== null) {
-		if (data instanceof ArrayBuffer || data instanceof Blob || data instanceof File || data instanceof Buffer) return data as unknown as T;
-
-		for (const key in data) {
-			data[key] = transformDates(data[key]);
-		}
 	}
 
-	return isDateStringRegex(data) ? new Date(data) as unknown as T : data;
+	private generateCacheKey(model: string, action: string, args: unknown[]): string {
+		const keyData = { model, action, args };
+		return `${model}:${action}:${makeHash(keyData)}`;
+	}
+
+	async clearCache(pattern?: string): Promise<void> {
+		await this.cache.flush(pattern);
+	}
+
+	async clearModelCache(modelName: string): Promise<void> {
+		await this.cache.flush(modelName);
+	}
+
+	enableCache(): void {
+		this.cacheEnabled = true;
+	}
+
+	disableCache(): void {
+		this.cacheEnabled = false;
+	}
+
+	async close(): Promise<void> {
+		await this.client.$disconnect();
+		if (this.cache.close) await this.cache.close();
+	}
 }
