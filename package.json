@@ -12,7 +12,7 @@
 	},
 	"repository": "https://github.com/Digital39999/prisma-cache-all",
 	"main": "dist/index.js",
-	"license": "MIT",
+	"license": "GPL-3.0",
 	"pnpm": {
 		"onlyBuiltDependencies": [
 			"@prisma/client"
