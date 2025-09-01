@@ -9,10 +9,15 @@ export type Cache = {
 }
 
 export type CacheOptions = {
-	ttlSeconds?: number;
 	maxSize?: number;
-	keyPrefix?: string;
 	enabled?: boolean;
+	keyPrefix?: string;
+	ttlSeconds?: number;
+
+	onDBRequest?: (model: string, action: string, args: unknown) => Promise<void>;
+
+	onCacheHit?: (key: string) => Promise<void>;
+	onCacheMiss?: (key: string) => Promise<void>;
 }
 
 export type SingletonClient = {

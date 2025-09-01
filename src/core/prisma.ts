@@ -11,7 +11,7 @@ export class PrismaWithCache {
 	public readonly cache: Cache;
 	public readonly client: PrismaClient;
 
-	constructor (client: PrismaClient, cache?: Cache, options: CacheOptions = {}) {
+	constructor (client: PrismaClient, cache?: Cache, private options: CacheOptions = {}) {
 		this.cacheEnabled = options.enabled ?? true;
 
 		if (!PrismaWithCache.singleton.cache) PrismaWithCache.singleton.cache = cache ?? new LRUCache(options);
@@ -36,7 +36,9 @@ export class PrismaWithCache {
 
 					model[action] = async (...args: unknown[]) => {
 						const result = await original(...args);
+
 						if (this.cacheEnabled) await this.cache.flush(modelName);
+						await this.options.onDBRequest?.(modelName, action, args);
 
 						return result;
 					};
@@ -49,11 +51,17 @@ export class PrismaWithCache {
 
 					model[action] = async (...args: unknown[]) => {
 						if (!this.cacheEnabled) return original(...args);
+						await this.options.onDBRequest?.(modelName, action, args);
+
 						const cacheKey = this.generateCacheKey(modelName, action, args);
 
 						const cached = await this.cache.read(cacheKey);
-						if (cached) return deserialize(cached);
+						if (cached) {
+							await this.options.onCacheHit?.(cacheKey);
+							return deserialize(cached);
+						}
 
+						await this.options.onCacheMiss?.(cacheKey);
 						const result = await original(...args);
 						await this.cache.write(cacheKey, serialize(result));
 
