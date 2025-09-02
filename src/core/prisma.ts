@@ -1,4 +1,4 @@
-import { Cache, SingletonClient, CacheOptions } from '../modules/types';
+import { Cache, SingletonClient, CacheOptions, MetricsCallbacks } from '../modules/types';
 import { makeHash, serialize, deserialize } from '../modules/utils';
 import { PureActions, ImpureActions } from '../modules/constants';
 import type { PrismaClient } from '@prisma/client';
@@ -6,13 +6,16 @@ import { LRUCache } from './lru';
 
 export class PrismaWithCache {
 	private static singleton: SingletonClient = {};
-	private cacheEnabled: boolean;
+	private metricsCallbacks: MetricsCallbacks;
+
+	public cacheEnabled: boolean;
 
 	public readonly cache: Cache;
 	public readonly client: PrismaClient;
 
-	constructor (client: PrismaClient, cache?: Cache, private options: CacheOptions = {}) {
+	constructor (client: PrismaClient, cache?: Cache, options: CacheOptions = {}) {
 		this.cacheEnabled = options.enabled ?? true;
+		this.metricsCallbacks = options.metrics ?? {};
 
 		if (!PrismaWithCache.singleton.cache) PrismaWithCache.singleton.cache = cache ?? new LRUCache(options);
 		if (!PrismaWithCache.singleton.client) {
@@ -25,7 +28,9 @@ export class PrismaWithCache {
 	}
 
 	private wrapClientMethods(client: PrismaClient): void {
-		const modelNames = Object.getOwnPropertyNames(client).filter((prop) => !prop.startsWith('$') && !prop.startsWith('_') && typeof client[prop] === 'object');
+		const modelNames = Object.getOwnPropertyNames(client).filter(
+			(prop) => !prop.startsWith('$') && !prop.startsWith('_') && typeof client[prop] === 'object',
+		);
 
 		for (const modelName of modelNames) {
 			const model = client[modelName];
@@ -35,12 +40,22 @@ export class PrismaWithCache {
 					const original = model[action].bind(model);
 
 					model[action] = async (...args: unknown[]) => {
-						const result = await original(...args);
+						const timeNow = Date.now();
 
-						if (this.cacheEnabled) await this.cache.flush(modelName);
-						await this.options.onDBRequest?.(modelName, action, args);
+						try {
+							const result = await original(...args);
+							const duration = Date.now() - timeNow;
 
-						return result;
+							this.metricsCallbacks.onDbRequest?.(modelName, action, duration);
+
+							if (this.cacheEnabled) await this.cache.flush(modelName);
+
+							return result;
+						} catch (error) {
+							const duration = Date.now() - timeNow;
+							this.metricsCallbacks.onDbError?.(modelName, action, error as Error, duration);
+							throw error;
+						}
 					};
 				}
 			}
@@ -50,22 +65,35 @@ export class PrismaWithCache {
 					const original = model[action].bind(model);
 
 					model[action] = async (...args: unknown[]) => {
-						if (!this.cacheEnabled) return original(...args);
-						await this.options.onDBRequest?.(modelName, action, args);
-
 						const cacheKey = this.generateCacheKey(modelName, action, args);
 
-						const cached = await this.cache.read(cacheKey);
-						if (cached) {
-							await this.options.onCacheHit?.(cacheKey);
-							return deserialize(cached);
+						if (this.cacheEnabled) {
+							const cached = await this.cache.read(cacheKey);
+							if (cached) {
+								this.metricsCallbacks.onCacheHit?.(cacheKey, modelName, action);
+								return deserialize(cached);
+							}
+
+							this.metricsCallbacks.onCacheMiss?.(cacheKey, modelName, action);
 						}
 
-						await this.options.onCacheMiss?.(cacheKey);
-						const result = await original(...args);
-						await this.cache.write(cacheKey, serialize(result));
+						const timeNow = Date.now();
+						try {
+							const result = await original(...args);
+							const duration = Date.now() - timeNow;
 
-						return result;
+							this.metricsCallbacks.onDbRequest?.(modelName, action, duration);
+
+							if (this.cacheEnabled) {
+								this.cache.write(cacheKey, serialize(result));
+							}
+
+							return result;
+						} catch (error) {
+							const duration = Date.now() - timeNow;
+							this.metricsCallbacks.onDbError?.(modelName, action, error as Error, duration);
+							throw error;
+						}
 					};
 				}
 			}
@@ -85,16 +113,22 @@ export class PrismaWithCache {
 		await this.cache.flush(modelName);
 	}
 
+	async close(): Promise<void> {
+		await this.client.$disconnect();
+		if (this.cache.close) await this.cache.close();
+	}
+
+	// Metrics callbacks.
+	setMetricsCallbacks(callbacks: MetricsCallbacks): void {
+		this.metricsCallbacks = { ...this.metricsCallbacks, ...callbacks };
+	}
+
+	// Toggle methods.
 	enableCache(): void {
 		this.cacheEnabled = true;
 	}
 
 	disableCache(): void {
 		this.cacheEnabled = false;
-	}
-
-	async close(): Promise<void> {
-		await this.client.$disconnect();
-		if (this.cache.close) await this.cache.close();
 	}
 }

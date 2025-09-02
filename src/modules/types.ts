@@ -13,11 +13,16 @@ export type CacheOptions = {
 	enabled?: boolean;
 	keyPrefix?: string;
 	ttlSeconds?: number;
+	metrics?: MetricsCallbacks;
+}
 
-	onDBRequest?: (model: string, action: string, args: unknown) => Promise<void>;
+export type MetricsCallbacks = {
+	onCacheHit?: (key: string, model: string, action: string) => void;
+	onCacheMiss?: (key: string, model: string, action: string) => void;
 
-	onCacheHit?: (key: string) => Promise<void>;
-	onCacheMiss?: (key: string) => Promise<void>;
+	onDbConnectionPoolChange?: (active: number, idle: number, total: number) => void;
+	onDbRequest?: (model: string, action: string, durationMs: number) => void;
+	onDbError?: (model: string, action: string, error: Error, durationMs: number) => void;
 }
 
 export type SingletonClient = {
