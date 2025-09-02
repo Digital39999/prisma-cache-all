@@ -6,9 +6,11 @@ export type AllActions = PureAction | ImpureAction;
 export type Cache = {
 	read: (key: string) => Promise<string | null>;
 	write: (key: string, value: string, ttl?: number) => Promise<void>;
-	flush: (pattern?: string) => Promise<void>;
 	delete: (key: string) => Promise<void>;
-	close?: () => Promise<void> | void;
+
+	size: () => Promise<number>;
+	flush: (pattern?: string) => Promise<void>;
+	close?: () => Promise<void>;
 }
 
 export type CacheOptions<ModelNames extends string = string> = {
@@ -22,6 +24,7 @@ export type CacheOptions<ModelNames extends string = string> = {
 export type MetricsCallbacks<ModelNames extends string = string> = {
 	onCacheHit?: (model: ModelNames, action: AllActions, key: string) => void;
 	onCacheMiss?: (model: ModelNames, action: AllActions, key: string) => void;
+	onCacheSizeUpdate?: (newSize: number) => void;
 
 	onDbRequest?: (model: ModelNames, action: AllActions, durationMs: number) => void;
 	onDbError?: (model: ModelNames, action: AllActions, error: Error, durationMs: number) => void;

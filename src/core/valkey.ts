@@ -64,6 +64,10 @@ export class ValKeyCache implements Cache {
 		await this.client.quit();
 	}
 
+	async size(): Promise<number> {
+		return this.client.dbsize();
+	}
+
 	private startCleanup(intervalMs: number = 600000): void {
 		this.cleanupInterval = setInterval(async () => {
 			const keys = await this.client.keys(`${this.keyPrefix}:*`);

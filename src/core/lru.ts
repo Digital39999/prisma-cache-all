@@ -43,7 +43,11 @@ export class LRUCache<ModelNames extends string = string> implements Cache {
 		this.cache.delete(key);
 	}
 
-	close(): void {
+	async size(): Promise<number> {
+		return this.cache.size;
+	}
+
+	async close(): Promise<void> {
 		this.cache.clear();
 	}
 }

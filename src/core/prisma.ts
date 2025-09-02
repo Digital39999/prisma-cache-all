@@ -48,7 +48,12 @@ export class PrismaWithCache<ModelNames extends string = string> {
 
 							this.metricsCallbacks.onDbRequest?.(modelName, action, duration);
 
-							if (this.cacheEnabled) await this.cache.flush(modelName);
+							if (this.cacheEnabled) {
+								await this.cache.flush(modelName);
+
+								const size = await this.cache.size?.();
+								this.metricsCallbacks.onCacheSizeUpdate?.(size);
+							}
 
 							return result;
 						} catch (error) {
@@ -85,7 +90,10 @@ export class PrismaWithCache<ModelNames extends string = string> {
 							this.metricsCallbacks.onDbRequest?.(modelName, action, duration);
 
 							if (this.cacheEnabled) {
-								this.cache.write(cacheKey, serialize(result));
+								await this.cache.write(cacheKey, serialize(result));
+
+								const size = await this.cache.size?.();
+								this.metricsCallbacks.onCacheSizeUpdate?.(size);
 							}
 
 							return result;
