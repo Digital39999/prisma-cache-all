@@ -3,6 +3,10 @@ import type { PrismaClient } from '@prisma/client';
 
 export type AllActions = PureAction | ImpureAction;
 
+export type FirstToLowerCase<T extends string> = T extends `${infer F}${infer R}`
+	? `${Lowercase<F>}${R}`
+	: T;
+
 export type Cache = {
 	read: (key: string) => Promise<string | null>;
 	write: (key: string, value: string, ttl?: number) => Promise<void>;

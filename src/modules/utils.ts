@@ -1,3 +1,4 @@
+import { FirstToLowerCase } from './types';
 import { createHash } from 'crypto';
 
 export function makeHash(data: unknown): string {
@@ -7,6 +8,10 @@ export function makeHash(data: unknown): string {
 
 export function isDateString(value: unknown): value is string {
 	return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(value);
+}
+
+export function firstToLowerCase<T extends string>(str: T): FirstToLowerCase<T> {
+	return (str.charAt(0).toLowerCase() + str.slice(1)) as FirstToLowerCase<T>;
 }
 
 export function serialize(value: unknown): string {

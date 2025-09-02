@@ -1,5 +1,5 @@
 import { Cache, SingletonClient, CacheOptions, MetricsCallbacks } from '../modules/types';
-import { makeHash, serialize, deserialize } from '../modules/utils';
+import { makeHash, serialize, deserialize, firstToLowerCase } from '../modules/utils';
 import { PureActions, ImpureActions } from '../modules/constants';
 import type { PrismaClient } from '@prisma/client';
 import { LRUCache } from './lru';
@@ -27,6 +27,11 @@ export class PrismaWithCache<ModelNames extends string = string> {
 		this.cache = PrismaWithCache.singleton.cache;
 	}
 
+	private callMetric<K extends keyof MetricsCallbacks<ModelNames>>(key: K, ...args: Parameters<NonNullable<MetricsCallbacks<ModelNames>[K]>>): void {
+		const fn = this.metricsCallbacks[key] as (...args: any[]) => void; // eslint-disable-line
+		if (fn) fn(...args);
+	}
+
 	private wrapClientMethods(client: PrismaClient): void {
 		const modelNames = Object.getOwnPropertyNames(client).filter(
 			(prop) => !prop.startsWith('$') && !prop.startsWith('_') && typeof client[prop] === 'object',
@@ -36,7 +41,9 @@ export class PrismaWithCache<ModelNames extends string = string> {
 			const model = client[modelName];
 
 			// Impure Actions (create, update, delete)
-			for (const action of ImpureActions) {
+			for (const rawAction of ImpureActions) {
+				const action = firstToLowerCase(rawAction);
+
 				if (typeof model[action] === 'function') {
 					const original = model[action].bind(model);
 					model[action] = async (...args: unknown[]) => {
@@ -45,18 +52,18 @@ export class PrismaWithCache<ModelNames extends string = string> {
 							const result = await original(...args);
 							const duration = Date.now() - timeNow;
 
-							this.metricsCallbacks.onDbRequest?.(modelName, action, duration);
+							this.callMetric('onDbRequest', modelName, rawAction, duration);
 
 							if (this.cacheEnabled) {
 								await this.cache.flush(modelName);
 								const size = await this.cache.size?.();
-								this.metricsCallbacks.onCacheSizeUpdate?.(size);
+								this.callMetric('onCacheSizeUpdate', size);
 							}
 
 							return result;
 						} catch (error) {
 							const duration = Date.now() - timeNow;
-							this.metricsCallbacks.onDbError?.(modelName, action, error as Error, duration);
+							this.callMetric('onDbError', modelName, rawAction, error as Error, duration);
 							throw error;
 						}
 					};
@@ -64,7 +71,9 @@ export class PrismaWithCache<ModelNames extends string = string> {
 			}
 
 			// Pure Actions (findMany, findUnique)
-			for (const action of PureActions) {
+			for (const rawAction of PureActions) {
+				const action = firstToLowerCase(rawAction);
+
 				if (typeof model[action] === 'function') {
 					const original = model[action].bind(model);
 					model[action] = async (...args: unknown[]) => {
@@ -73,10 +82,10 @@ export class PrismaWithCache<ModelNames extends string = string> {
 						if (this.cacheEnabled) {
 							const cached = await this.cache.read(cacheKey);
 							if (cached) {
-								this.metricsCallbacks.onCacheHit?.(modelName, action, cacheKey);
+								this.callMetric('onCacheHit', modelName, rawAction, cacheKey);
 								return deserialize(cached);
 							} else {
-								this.metricsCallbacks.onCacheMiss?.(modelName, action, cacheKey);
+								this.callMetric('onCacheMiss', modelName, rawAction, cacheKey);
 							}
 						}
 
@@ -85,18 +94,18 @@ export class PrismaWithCache<ModelNames extends string = string> {
 							const result = await original(...args);
 							const duration = Date.now() - timeNow;
 
-							this.metricsCallbacks.onDbRequest?.(modelName, action, duration);
+							this.callMetric('onDbRequest', modelName, rawAction, duration);
 
 							if (this.cacheEnabled) {
 								await this.cache.write(cacheKey, serialize(result));
 								const size = await this.cache.size?.();
-								this.metricsCallbacks.onCacheSizeUpdate?.(size);
+								this.callMetric('onCacheSizeUpdate', size);
 							}
 
 							return result;
 						} catch (error) {
 							const duration = Date.now() - timeNow;
-							this.metricsCallbacks.onDbError?.(modelName, action, error as Error, duration);
+							this.callMetric('onDbError', modelName, rawAction, error as Error, duration);
 							throw error;
 						}
 					};
