@@ -1,11 +1,11 @@
 import { LRUCache as DefaultLRUCache } from 'lru-cache';
 import { Cache, CacheOptions } from '../modules/types';
 
-export class LRUCache implements Cache {
+export class LRUCache<ModelNames extends string = string> implements Cache {
 	private cache: DefaultLRUCache<string, string>;
 	private defaultTtl: number;
 
-	constructor (options: CacheOptions = {}) {
+	constructor (options: CacheOptions<ModelNames> = {}) {
 		this.defaultTtl = (options.ttlSeconds ?? 300) * 1000;
 
 		this.cache = new DefaultLRUCache({

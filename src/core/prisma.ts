@@ -4,16 +4,16 @@ import { PureActions, ImpureActions } from '../modules/constants';
 import type { PrismaClient } from '@prisma/client';
 import { LRUCache } from './lru';
 
-export class PrismaWithCache {
+export class PrismaWithCache<ModelNames extends string = string> {
 	private static singleton: SingletonClient = {};
-	private metricsCallbacks: MetricsCallbacks;
+	private metricsCallbacks: MetricsCallbacks<ModelNames>;
 
 	public cacheEnabled: boolean;
 
 	public readonly cache: Cache;
 	public readonly client: PrismaClient;
 
-	constructor (client: PrismaClient, cache?: Cache, options: CacheOptions = {}) {
+	constructor (client: PrismaClient, cache?: Cache, options: CacheOptions<ModelNames> = {}) {
 		this.cacheEnabled = options.enabled ?? true;
 		this.metricsCallbacks = options.metrics ?? {};
 
@@ -30,7 +30,7 @@ export class PrismaWithCache {
 	private wrapClientMethods(client: PrismaClient): void {
 		const modelNames = Object.getOwnPropertyNames(client).filter(
 			(prop) => !prop.startsWith('$') && !prop.startsWith('_') && typeof client[prop] === 'object',
-		);
+		) as ModelNames[];
 
 		for (const modelName of modelNames) {
 			const model = client[modelName];
@@ -119,7 +119,7 @@ export class PrismaWithCache {
 	}
 
 	// Metrics callbacks.
-	setMetricsCallbacks(callbacks: MetricsCallbacks): void {
+	setMetricsCallbacks(callbacks: MetricsCallbacks<ModelNames>): void {
 		this.metricsCallbacks = { ...this.metricsCallbacks, ...callbacks };
 	}
 

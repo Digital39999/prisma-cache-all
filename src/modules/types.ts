@@ -11,19 +11,18 @@ export type Cache = {
 	close?: () => Promise<void> | void;
 }
 
-export type CacheOptions = {
+export type CacheOptions<ModelNames extends string = string> = {
 	maxSize?: number;
 	enabled?: boolean;
 	keyPrefix?: string;
 	ttlSeconds?: number;
-	metrics?: MetricsCallbacks;
+	metrics?: MetricsCallbacks<ModelNames>;
 }
 
 export type MetricsCallbacks<ModelNames extends string = string> = {
 	onCacheHit?: (model: ModelNames, action: AllActions, key: string) => void;
 	onCacheMiss?: (model: ModelNames, action: AllActions, key: string) => void;
 
-	onDbConnectionPoolChange?: (active: number, idle: number, total: number) => void;
 	onDbRequest?: (model: ModelNames, action: AllActions, durationMs: number) => void;
 	onDbError?: (model: ModelNames, action: AllActions, error: Error, durationMs: number) => void;
 }
