@@ -1,4 +1,7 @@
+import { PureAction, ImpureAction } from './constants';
 import type { PrismaClient } from '@prisma/client';
+
+export type AllActions = PureAction | ImpureAction;
 
 export type Cache = {
 	read: (key: string) => Promise<string | null>;
@@ -16,13 +19,13 @@ export type CacheOptions = {
 	metrics?: MetricsCallbacks;
 }
 
-export type MetricsCallbacks = {
-	onCacheHit?: (key: string, model: string, action: string) => void;
-	onCacheMiss?: (key: string, model: string, action: string) => void;
+export type MetricsCallbacks<ModelNames extends string = string> = {
+	onCacheHit?: (model: ModelNames, action: AllActions, key: string) => void;
+	onCacheMiss?: (model: ModelNames, action: AllActions, key: string) => void;
 
 	onDbConnectionPoolChange?: (active: number, idle: number, total: number) => void;
-	onDbRequest?: (model: string, action: string, durationMs: number) => void;
-	onDbError?: (model: string, action: string, error: Error, durationMs: number) => void;
+	onDbRequest?: (model: ModelNames, action: AllActions, durationMs: number) => void;
+	onDbError?: (model: ModelNames, action: AllActions, error: Error, durationMs: number) => void;
 }
 
 export type SingletonClient = {

@@ -70,11 +70,11 @@ export class PrismaWithCache {
 						if (this.cacheEnabled) {
 							const cached = await this.cache.read(cacheKey);
 							if (cached) {
-								this.metricsCallbacks.onCacheHit?.(cacheKey, modelName, action);
+								this.metricsCallbacks.onCacheHit?.(modelName, action, cacheKey);
 								return deserialize(cached);
 							}
 
-							this.metricsCallbacks.onCacheMiss?.(cacheKey, modelName, action);
+							this.metricsCallbacks.onCacheMiss?.(modelName, action, cacheKey);
 						}
 
 						const timeNow = Date.now();
