@@ -35,13 +35,12 @@ export class PrismaWithCache<ModelNames extends string = string> {
 		for (const modelName of modelNames) {
 			const model = client[modelName];
 
+			// Impure Actions (create, update, delete)
 			for (const action of ImpureActions) {
 				if (typeof model[action] === 'function') {
 					const original = model[action].bind(model);
-
 					model[action] = async (...args: unknown[]) => {
 						const timeNow = Date.now();
-
 						try {
 							const result = await original(...args);
 							const duration = Date.now() - timeNow;
@@ -50,7 +49,6 @@ export class PrismaWithCache<ModelNames extends string = string> {
 
 							if (this.cacheEnabled) {
 								await this.cache.flush(modelName);
-
 								const size = await this.cache.size?.();
 								this.metricsCallbacks.onCacheSizeUpdate?.(size);
 							}
@@ -65,10 +63,10 @@ export class PrismaWithCache<ModelNames extends string = string> {
 				}
 			}
 
+			// Pure Actions (findMany, findUnique)
 			for (const action of PureActions) {
 				if (typeof model[action] === 'function') {
 					const original = model[action].bind(model);
-
 					model[action] = async (...args: unknown[]) => {
 						const cacheKey = this.generateCacheKey(modelName, action, args);
 
@@ -77,9 +75,9 @@ export class PrismaWithCache<ModelNames extends string = string> {
 							if (cached) {
 								this.metricsCallbacks.onCacheHit?.(modelName, action, cacheKey);
 								return deserialize(cached);
+							} else {
+								this.metricsCallbacks.onCacheMiss?.(modelName, action, cacheKey);
 							}
-
-							this.metricsCallbacks.onCacheMiss?.(modelName, action, cacheKey);
 						}
 
 						const timeNow = Date.now();
@@ -91,7 +89,6 @@ export class PrismaWithCache<ModelNames extends string = string> {
 
 							if (this.cacheEnabled) {
 								await this.cache.write(cacheKey, serialize(result));
-
 								const size = await this.cache.size?.();
 								this.metricsCallbacks.onCacheSizeUpdate?.(size);
 							}
@@ -128,7 +125,7 @@ export class PrismaWithCache<ModelNames extends string = string> {
 
 	// Metrics callbacks.
 	setMetricsCallbacks(callbacks: MetricsCallbacks<ModelNames>): void {
-		this.metricsCallbacks = { ...this.metricsCallbacks, ...callbacks };
+		Object.assign(this.metricsCallbacks, callbacks);
 	}
 
 	// Toggle methods.
