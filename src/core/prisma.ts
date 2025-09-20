@@ -55,7 +55,7 @@ export class PrismaWithCache<ModelNames extends string = string> {
 							this.callMetric('onDbRequest', modelName, rawAction, duration);
 
 							if (this.cacheEnabled) {
-								await this.cache.flush(modelName);
+								await this.cache.flush(`${modelName}:`);
 								const size = await this.cache.size?.();
 								this.callMetric('onCacheSizeUpdate', size);
 							}
@@ -124,7 +124,7 @@ export class PrismaWithCache<ModelNames extends string = string> {
 	}
 
 	async clearModelCache(modelName: string): Promise<void> {
-		await this.cache.flush(modelName);
+		await this.cache.flush(`${modelName}:`);
 	}
 
 	async close(): Promise<void> {

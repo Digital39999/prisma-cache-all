@@ -48,7 +48,7 @@ export class ValKeyCache implements Cache {
 
 	async flush(pattern?: string): Promise<void> {
 		const searchPattern = pattern
-			? `${this.keyPrefix}:*${pattern}*`
+			? `${this.keyPrefix}:${pattern}*`
 			: `${this.keyPrefix}:*`;
 
 		const keys = await this.client.keys(searchPattern);

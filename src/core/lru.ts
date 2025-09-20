@@ -31,7 +31,10 @@ export class LRUCache<ModelNames extends string = string> implements Cache {
 			return;
 		}
 
-		const regex = new RegExp(pattern);
+		const regex = pattern.endsWith(':')
+			? new RegExp(`^${pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`)
+			: new RegExp(pattern);
+
 		for (const key of this.cache.keys()) {
 			if (regex.test(key)) {
 				this.cache.delete(key);
